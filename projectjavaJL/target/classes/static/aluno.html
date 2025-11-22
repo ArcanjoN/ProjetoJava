@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciamento de Alunos (CRUD API)</title>
+    <style>
+        /* Estilos Básicos */
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 5px; }
+        input[type="text"], input[type="number"] { padding: 10px; margin-bottom: 10px; width: calc(100% - 22px); border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; color: white; margin-right: 5px; }
+        .btn-primary { background-color: #007bff; }
+        .btn-success { background-color: #28a745; }
+        .btn-danger { background-color: #dc3545; }
+        .btn-info { background-color: #17a2b8; }
+        .btn-warning { background-color: #ffc107; color: #333;}
+        .message-box { padding: 10px; margin-top: 10px; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+        /* Layout para formulários */
+        .form-group { margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Sistema de Gerenciamento de Alunos</h1>
+        
+        <div id="message-container" class="message-box" style="display: none;"></div>
+        
+        <h2>🔎 Pesquisar Aluno por ID</h2>
+        <div class="form-group" style="display: flex; gap: 10px;">
+            <input type="number" id="searchId" placeholder="Digite o ID do Aluno" style="flex-grow: 1;">
+            <button class="btn-info" onclick="searchAlunoById()">Buscar</button>
+        </div>
+        <div id="searchResult" style="margin-top: 10px;"></div>
+        
+        <hr>
+
+        <h2 id="form-title">➕ Cadastrar Novo Aluno</h2>
+        <form id="alunoForm">
+            <input type="hidden" id="alunoId">
+            <div class="form-group">
+                <label for="nome">Nome:</label>
+                <input type="text" id="nome" required>
+            </div>
+            <div class="form-group">
+                <label for="turma">Turma:</label>
+                <input type="number" id="turma" required>
+            </div>
+            <button type="submit" id="submitBtn" class="btn-primary">Cadastrar</button>
+            <button type="button" id="cancelEditBtn" class="btn-warning" style="display: none;" onclick="resetForm()">Cancelar Edição</button>
+        </form>
+
+        <hr>
+
+        <h2>📚 Alunos Existentes</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>Turma</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="alunosTableBody">
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost:8088/users';
+        const form = document.getElementById('alunoForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const alunoIdInput = document.getElementById('alunoId');
+        const nomeInput = document.getElementById('nome');
+        const turmaInput = document.getElementById('turma');
+        const alunosTableBody = document.getElementById('alunosTableBody');
+        const messageContainer = document.getElementById('message-container');
+        const formTitle = document.getElementById('form-title');
+        const cancelEditBtn = document.getElementById('cancelEditBtn');
+        const searchResultDiv = document.getElementById('searchResult');
+
+        /**
+         * Exibe uma mensagem de feedback (sucesso ou erro) para o usuário.
+         */
+        function showMessage(message, isError = false) {
+            messageContainer.style.display = 'block';
+            messageContainer.textContent = message;
+            messageContainer.className = 'message-box ' + (isError ? 'error' : 'success');
+            setTimeout(() => {
+                messageContainer.style.display = 'none';
+            }, 5000);
+        }
+
+        /**
+         * Limpa e reseta o formulário para o modo de Cadastro.
+         */
+        function resetForm() {
+            form.reset();
+            alunoIdInput.value = '';
+            formTitle.textContent = '➕ Cadastrar Novo Aluno';
+            submitBtn.textContent = 'Cadastrar';
+            submitBtn.className = 'btn-primary';
+            cancelEditBtn.style.display = 'none';
+        }
+
+        /**
+         *Listar Todos os Alunos (GET /users)
+         */
+        async function fetchAlunos() {
+            try {
+                const response = await fetch(BASE_URL);
+                if (!response.ok) {
+                    throw new Error('Falha ao buscar alunos: ' + response.status);
+                }
+                const alunos = await response.json();
+                renderTable(alunos);
+            } catch (error) {
+                console.error('Erro ao buscar alunos:', error);
+                showMessage('Não foi possível carregar a lista de alunos.', true);
+            }
+        }
+
+        /**
+         *Cadastrar Novo Aluno (POST /users)
+         */
+        async function createAluno(alunoData) {
+            try {
+                const response = await fetch(BASE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(alunoData)
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || 'Erro ao cadastrar.');
+                }
+                
+                showMessage(data.message || 'Aluno criado com sucesso!', false);
+                resetForm();
+                fetchAlunos(); // Atualiza a tabela
+            } catch (error) {
+                console.error('Erro na criação:', error);
+                showMessage(error.message, true);
+            }
+        }
+
+        /**
+         *Atualizar Aluno (PUT /users/{id})
+         */
+        async function updateAluno(id, alunoData) {
+            try {
+                const response = await fetch(`${BASE_URL}/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(alunoData)
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || 'Erro ao atualizar.');
+                }
+                
+                showMessage(data.message || 'Aluno atualizado com sucesso!', false);
+                resetForm();
+                fetchAlunos(); // Atualiza a tabela
+            } catch (error) {
+                console.error('Erro na atualização:', error);
+                showMessage(error.message, true);
+            }
+        }
+        
+        /**
+         *Excluir Aluno (DELETE /users/{id})
+         */
+        async function deleteAluno(id) {
+            if (!confirm(`Tem certeza que deseja excluir o aluno com ID ${id}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${BASE_URL}/${id}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || 'Erro ao excluir.');
+                }
+                
+                showMessage(data.message || 'Aluno excluído com sucesso!', false);
+                fetchAlunos(); // Atualiza a tabela
+            } catch (error) {
+                console.error('Erro na exclusão:', error);
+                showMessage(error.message, true);
+            }
+        }
+        
+        /**
+         * Pesquisar Aluno por ID (GET /users/{id})
+         */
+        async function searchAlunoById() {
+            const id = document.getElementById('searchId').value;
+            searchResultDiv.innerHTML = ''; 
+
+            if (!id) {
+                searchResultDiv.innerHTML = '<p style="color:red;">Por favor, digite um ID.</p>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${BASE_URL}/${id}`);
+                const data = await response.json();
+
+                if (response.status === 404) {
+                    searchResultDiv.innerHTML = `<p style="color:orange;">${data.message || 'Aluno não encontrado.'}</p>`;
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error(data.message || 'Erro ao buscar aluno.');
+                }
+
+                // Se encontrado, exibe os detalhes
+                searchResultDiv.innerHTML = `
+                    <p><strong>Resultado da Pesquisa:</strong></p>
+                    <ul>
+                        <li><strong>ID:</strong> ${data.id}</li>
+                        <li><strong>Nome:</strong> ${data.nome}</li>
+                        <li><strong>Turma:</strong> ${data.turma}</li>
+                    </ul>
+                    <button class="btn-warning" onclick="editAluno(${data.id}, '${data.nome}', ${data.turma})">Editar</button>
+                    <button class="btn-danger" onclick="deleteAluno(${data.id})">Excluir</button>
+                `;
+
+            } catch (error) {
+                console.error('Erro na pesquisa:', error);
+                searchResultDiv.innerHTML = `<p style="color:red;">Falha na comunicação com a API.</p>`;
+            }
+        }
+
+        /**
+         * Preenche o formulário para o modo de edição.
+         */
+        function editAluno(id, nome, turma) {
+            alunoIdInput.value = id;
+            nomeInput.value = nome;
+            turmaInput.value = turma;
+            formTitle.textContent = `✍️ Editar Aluno ID: ${id}`;
+            submitBtn.textContent = 'Salvar Alterações';
+            submitBtn.className = 'btn-success';
+            cancelEditBtn.style.display = 'inline-block';
+            window.scrollTo(0, 0); // Volta ao topo para ver o formulário
+        }
+
+        /**
+         * Renderiza a tabela com a lista de alunos.
+         */
+        function renderTable(alunos) {
+            alunosTableBody.innerHTML = ''; 
+            if (alunos.length === 0) {
+                alunosTableBody.innerHTML = '<tr><td colspan="4">Nenhum aluno encontrado.</td></tr>';
+                return;
+            }
+
+            alunos.forEach(aluno => {
+                const row = alunosTableBody.insertRow();
+                row.insertCell().textContent = aluno.id;
+                row.insertCell().textContent = aluno.nome;
+                row.insertCell().textContent = aluno.turma;
+                
+                const actionsCell = row.insertCell();
+                actionsCell.innerHTML = `
+                    <button class="btn-warning" onclick="editAluno(${aluno.id}, '${aluno.nome}', ${aluno.turma   })">Editar</button>
+                    <button class="btn-danger" onclick="deleteAluno(${aluno.id})">Excluir</button>
+                `;
+            });
+        }
+
+ 
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            
+            const id = alunoIdInput.value;
+            const alunoData = {
+                nome: nomeInput.value,
+                turma: parseInt(turmaInput.value, 10) 
+            };
+
+            if (id) {
+                // Modo Edição
+                updateAluno(id, alunoData);
+            } else {
+                // Modo Criação
+                createAluno(alunoData);
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', fetchAlunos);
+
+    </script>
+</body>
+</html>
